@@ -1,4 +1,4 @@
-package com.example.mi_unbootloader
+package com.josprox.miunboot
 
 import io.flutter.embedding.android.FlutterActivity
 
