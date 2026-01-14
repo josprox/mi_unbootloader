@@ -1,0 +1,4 @@
+storePassword=INSERT_PASSWORD_HERE
+keyPassword=INSERT_PASSWORD_HERE
+keyAlias=INSERT_KEY_ALIAS_HERE
+storeFile=C:/Users/jlhal/Documents/Proyectos/jossestrada.keystore
