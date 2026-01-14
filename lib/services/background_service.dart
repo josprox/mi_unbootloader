@@ -6,6 +6,8 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
 import '../services/time_service.dart';
+import 'package:timezone/data/latest.dart' as tz;
+import 'package:timezone/timezone.dart' as tz;
 
 @pragma('vm:entry-point')
 class BackgroundService {
@@ -18,7 +20,7 @@ class BackgroundService {
       'MY FOREGROUND SERVICE', // title
       description:
           'This channel is used for important notifications.', // description
-      importance: Importance.low, // importance must be at low or higher level
+      importance: Importance.high, // importance must be at low or higher level
     );
 
     final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
@@ -55,9 +57,13 @@ class BackgroundService {
     // Only available for flutter 3.0.0 and later
     DartPluginRegistrant.ensureInitialized();
 
+    // Initialize TimeZone for this isolate
+    tz.initializeTimeZones();
+
     print("BackgroundService: onStart called");
 
     final apiService = XiaomiApiService();
+    // Load data from preferences
     final timeService = TimeService();
 
     // Load data from preferences
@@ -113,18 +119,35 @@ class BackgroundService {
     }
 
     if (beijingTime != null) {
-      DateTime nowBeijing = beijingTime;
-      DateTime nextDay = nowBeijing.add(const Duration(days: 1));
-      DateTime targetTime = DateTime(
-        nextDay.year,
-        nextDay.month,
-        nextDay.day,
-        0,
-        0,
-        0,
-      ).subtract(Duration(milliseconds: timeShift.toInt()));
+      // Explicitly get location
+      final beijingLocation = tz.getLocation('Asia/Shanghai');
 
-      print("Target Time (Beijing): $targetTime");
+      // Convert DateTime to TZDateTime
+      final now = tz.TZDateTime.from(beijingTime, beijingLocation);
+
+      // Construct target for today 00:00 logic first
+      tz.TZDateTime targetTime = tz.TZDateTime(
+        beijingLocation,
+        now.year,
+        now.month,
+        now.day,
+        0,
+        0,
+        0,
+      );
+
+      // If target passed (e.g. it is 14:00, target was 00:00), aim for tomorrow 00:00
+      if (targetTime.isBefore(now)) {
+        targetTime = targetTime.add(const Duration(days: 1));
+      }
+
+      // Apply timeshift
+      DateTime finalTarget = targetTime.subtract(
+        Duration(milliseconds: timeShift.toInt()),
+      );
+
+      print("Target Time (Beijing): $finalTarget");
+      print("Current Time (Beijing): $now");
 
       final startTimestamp = DateTime.now().millisecondsSinceEpoch;
       final startBeijingTime = beijingTime;
