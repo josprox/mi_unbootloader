@@ -6,6 +6,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   desktop_webview_window
   dynamic_color
   flutter_inappwebview_windows
+  permission_handler_windows
   screen_retriever
   system_tray
   window_manager

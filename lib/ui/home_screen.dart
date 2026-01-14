@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart'; // Added for CookieManager
+import 'package:permission_handler/permission_handler.dart'; // Added for Battery Optimization
 import '../services/api_service.dart';
 import 'logs_screen.dart';
 import 'login_screen.dart';
@@ -89,9 +90,20 @@ class _HomeScreenState extends State<HomeScreen> {
     await _savePreferences();
     final service = FlutterBackgroundService();
     var isRunning = await service.isRunning();
+
     if (isRunning) {
       service.invoke("stopService");
     } else {
+      // Check permissions before starting
+      if (await Permission.notification.isDenied) {
+        await Permission.notification.request();
+      }
+
+      // Request to ignore battery optimizations for persistent service
+      if (await Permission.ignoreBatteryOptimizations.isDenied) {
+        await Permission.ignoreBatteryOptimizations.request();
+      }
+
       await service.startService();
     }
     setState(() {
