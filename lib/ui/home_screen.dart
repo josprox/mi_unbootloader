@@ -90,21 +90,35 @@ class _HomeScreenState extends State<HomeScreen> {
     await _savePreferences();
     final service = FlutterBackgroundService();
     var isRunning = await service.isRunning();
+    debugPrint(
+      "HomeScreen: _toggleService called. Currently running: $isRunning",
+    );
 
     if (isRunning) {
+      debugPrint("HomeScreen: Invoking stopService");
       service.invoke("stopService");
     } else {
-      // Check permissions before starting
-      if (await Permission.notification.isDenied) {
-        await Permission.notification.request();
+      // Check notification permission (Android 13+)
+      var status = await Permission.notification.status;
+      if (!status.isGranted) {
+        status = await Permission.notification.request();
       }
 
-      // Request to ignore battery optimizations for persistent service
-      if (await Permission.ignoreBatteryOptimizations.isDenied) {
-        await Permission.ignoreBatteryOptimizations.request();
+      if (status.isGranted) {
+        // Request to ignore battery optimizations for persistent service
+        if (await Permission.ignoreBatteryOptimizations.isDenied) {
+          await Permission.ignoreBatteryOptimizations.request();
+        }
+        await service.startService();
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Permission denied. Cannot start service.'),
+            ),
+          );
+        }
       }
-
-      await service.startService();
     }
     setState(() {
       _isRunning = !isRunning;

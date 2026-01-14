@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:ui';
+import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -49,8 +50,12 @@ class BackgroundService {
 
   @pragma('vm:entry-point')
   static void onStart(ServiceInstance service) async {
+    // Ensure bindings are initialized
+    WidgetsFlutterBinding.ensureInitialized();
     // Only available for flutter 3.0.0 and later
     DartPluginRegistrant.ensureInitialized();
+
+    print("BackgroundService: onStart called");
 
     final apiService = XiaomiApiService();
     final timeService = TimeService();
@@ -62,7 +67,12 @@ class BackgroundService {
     final deviceId = prefs.getString('device_id');
     final timeShift = prefs.getDouble('timeshift') ?? 0.0;
 
+    print(
+      "BackgroundService: Loaded prefs. Token: ${token1 != null}, DeviceID: ${deviceId != null}",
+    );
+
     if (token1 == null || deviceId == null) {
+      print("BackgroundService: Missing token or deviceId, stopping.");
       service.stopSelf();
       return;
     }
@@ -70,17 +80,26 @@ class BackgroundService {
     Timer? timer;
 
     if (service is AndroidServiceInstance) {
+      print("BackgroundService: Service IS AndroidServiceInstance");
       service.on('setAsForeground').listen((event) {
+        print("BackgroundService: Received setAsForeground");
         service.setAsForegroundService();
       });
 
       service.on('stopService').listen((event) {
+        print("BackgroundService: Received stopService event");
         timer?.cancel();
         service.stopSelf();
+        print("BackgroundService: Service stopped");
       });
+    } else {
+      print(
+        "BackgroundService: Service is NOT AndroidServiceInstance: ${service.runtimeType}",
+      );
     }
 
     if (service is AndroidServiceInstance) {
+      print("BackgroundService: Setting initial notification");
       service.setForegroundNotificationInfo(
         title: "Mi Unlocker Running",
         content: "Waiting for target time...",
