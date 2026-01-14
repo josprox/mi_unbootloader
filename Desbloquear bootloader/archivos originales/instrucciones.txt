@@ -1,0 +1,18 @@
+
+Gracias a@dotKin
+
+https://new.c.mi.com/global/
+https://xdaforums.com/t/how-to-unlock-bootloader-on-xiaomi-hyperos-all-devices-except-cn.4654009/
+
+Se debe de obtener la cookie de Firefox llamada:
+new_bbs_serviceToken
+
+Esto se pone en el archivo de texto token.txt pegándolo en la 1 y en la 3
+
+En Chrome se debe de poner esta función y devolverá un token
+javascript: (function(){var token=document.cookie.match(/popRunToken=([^;]+)/);if(token){prompt("Copia el token:", token[1]);}else{alert("Token no encontrado");}})()
+
+Esto se pone en el archivo de texto token.txt pegándolo en la 2 y en la 4
+
+----
+El archivo Script.py abriéndolo 4 veces, tienes que abrirlo y ponerle el número 1, luego abres otro, pones 2, luego otro y pones 3, finalmente pones otro y 4, esto asegura a que el archivo funcione
