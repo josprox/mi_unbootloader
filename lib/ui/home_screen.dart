@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart'; // Added for CookieManager
 import '../services/api_service.dart';
 import 'logs_screen.dart';
+import 'login_screen.dart';
 
-import 'dart:async'; // Add async import for Timer
+import 'dart:async';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -15,11 +17,13 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final TextEditingController _tokenController = TextEditingController();
-  final TextEditingController _popRunTokenController =
-      TextEditingController(); // New token per user request
+  final TextEditingController _popRunTokenController = TextEditingController();
   final TextEditingController _timeShiftController = TextEditingController();
+
   final XiaomiApiService _apiService = XiaomiApiService();
-  String _status = "Idle";
+
+  String _status = "Ready";
+  String? _userId;
   bool _isRunning = false;
   Timer? _statusTimer;
 
@@ -28,7 +32,6 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _loadPreferences();
     _checkServiceStatus();
-    // Start polling status
     _statusTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       _checkServiceStatus();
     });
@@ -48,6 +51,8 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _tokenController.text = prefs.getString('token') ?? '';
       _popRunTokenController.text = prefs.getString('poprun_token') ?? '';
+      _userId = prefs.getString('user_id');
+
       _timeShiftController.text = (prefs.getDouble('timeshift') ?? 0.0)
           .toString();
 
@@ -62,6 +67,9 @@ class _HomeScreenState extends State<HomeScreen> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('token', _tokenController.text);
     await prefs.setString('poprun_token', _popRunTokenController.text);
+    if (_userId != null) {
+      await prefs.setString('user_id', _userId!);
+    }
     await prefs.setDouble(
       'timeshift',
       double.tryParse(_timeShiftController.text) ?? 0.0,
@@ -86,7 +94,6 @@ class _HomeScreenState extends State<HomeScreen> {
     } else {
       await service.startService();
     }
-    // Update local state immediately for responsiveness, though Timer will confirm
     setState(() {
       _isRunning = !isRunning;
     });
@@ -105,9 +112,62 @@ class _HomeScreenState extends State<HomeScreen> {
     );
     setState(
       () => _status = canUnlock
-          ? "Account Ready!"
-          : "Account Not Ready (Check Logs)",
+          ? "Account Ready for Unlock!"
+          : "Account not authorized or Token invalid",
     );
+  }
+
+  Future<void> _openLoginScreen(BuildContext context) async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const LoginScreen()),
+    );
+
+    if (result != null && result is Map) {
+      if (mounted) {
+        setState(() {
+          if (result['token'] != null) {
+            _tokenController.text = result['token'];
+          }
+          if (result['popRunToken'] != null) {
+            _popRunTokenController.text = result['popRunToken'];
+          }
+          if (result['userId'] != null) {
+            _userId = result['userId'];
+          }
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Login successful! Tokens updated.')),
+        );
+
+        _savePreferences();
+        // optionally auto-check status
+        _checkAccountStatus();
+      }
+    }
+  }
+
+  void _clearLogin() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('token');
+    await prefs.remove('poprun_token');
+    await prefs.remove('user_id');
+
+    // Also clear WebView cookies to allow account switching
+    try {
+      await CookieManager.instance().deleteAllCookies();
+      debugPrint("WebView cookies cleared.");
+    } catch (e) {
+      debugPrint("Error clearing cookies: $e");
+    }
+
+    setState(() {
+      _tokenController.clear();
+      _popRunTokenController.clear();
+      _userId = null;
+      _status = "Idle";
+    });
   }
 
   @override
@@ -119,7 +179,8 @@ class _HomeScreenState extends State<HomeScreen> {
       body: CustomScrollView(
         slivers: [
           SliverAppBar.large(
-            title: const Text('Mi Bootloader Unlocker'),
+            title: const Text('Mi UnBootloader'),
+            centerTitle: true,
             actions: [
               IconButton(
                 icon: const Icon(Icons.history_edu),
@@ -139,28 +200,12 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _buildServiceStatusCard(colorScheme, textTheme),
-                  const SizedBox(height: 24),
-                  Text(
-                    "Configuration",
-                    style: textTheme.titleLarge?.copyWith(
-                      color: colorScheme.primary,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+                  _buildStatusOverview(colorScheme, textTheme),
                   const SizedBox(height: 16),
-                  _buildConfigCard(colorScheme),
-                  const SizedBox(height: 24),
-                  Text(
-                    "Actions",
-                    style: textTheme.titleLarge?.copyWith(
-                      color: colorScheme.primary,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+                  _buildConnectionCard(colorScheme, textTheme),
                   const SizedBox(height: 16),
-                  _buildActionsCard(colorScheme),
-                  const SizedBox(height: 48), // Bottom padding
+                  _buildAdvancedSection(colorScheme),
+                  const SizedBox(height: 80),
                 ],
               ),
             ),
@@ -169,149 +214,201 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _toggleService,
-        icon: Icon(_isRunning ? Icons.stop_circle : Icons.play_circle_filled),
-        label: Text(_isRunning ? "Stop Service" : "Start Service"),
-        backgroundColor: _isRunning
-            ? colorScheme.errorContainer
-            : colorScheme.primaryContainer,
+        icon: Icon(
+          _isRunning ? Icons.stop_circle_outlined : Icons.play_circle_fill,
+        ),
+        label: Text(_isRunning ? "STOP SERVICE" : "START SERVICE"),
+        backgroundColor: _isRunning ? colorScheme.error : colorScheme.primary,
         foregroundColor: _isRunning
-            ? colorScheme.onErrorContainer
-            : colorScheme.onPrimaryContainer,
+            ? colorScheme.onError
+            : colorScheme.onPrimary,
+        elevation: 4,
       ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
     );
   }
 
-  Widget _buildServiceStatusCard(ColorScheme colorScheme, TextTheme textTheme) {
+  Widget _buildStatusOverview(ColorScheme colorScheme, TextTheme textTheme) {
+    bool isReady = _status.contains("Ready");
+    // M3: Use proper containers, not hardcoded green backgrounds
+    final containerColor = _isRunning
+        ? colorScheme.primaryContainer
+        : (isReady
+              ? colorScheme
+                    .tertiaryContainer // Use tertiary for "success-like" states if possible, or just secondary
+              : colorScheme.surfaceContainerHighest);
+
+    final contentColor = _isRunning
+        ? colorScheme.onPrimaryContainer
+        : (isReady
+              ? colorScheme.onTertiaryContainer
+              : colorScheme.onSurfaceVariant);
+
+    final iconColor = _isRunning
+        ? colorScheme.onPrimaryContainer
+        : (isReady
+              ? Colors
+                    .green // Keep custom green icon for semantic clarity
+              : colorScheme.onSurfaceVariant);
+
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(24),
-        side: BorderSide(
-          color: _isRunning ? colorScheme.primary : colorScheme.outlineVariant,
-          width: _isRunning ? 2 : 1,
-        ),
+        side: BorderSide(color: colorScheme.outlineVariant.withOpacity(0.5)),
       ),
-      color: _isRunning
-          ? colorScheme.primaryContainer.withOpacity(0.3)
-          : colorScheme.surfaceVariant,
+      color: containerColor,
       child: Padding(
-        padding: const EdgeInsets.all(24.0),
+        padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
         child: Column(
           children: [
             Icon(
-              _isRunning ? Icons.sync : Icons.pause_circle_outline,
+              _isRunning
+                  ? Icons.timer
+                  : (isReady ? Icons.check_circle : Icons.info),
               size: 48,
-              color: _isRunning ? colorScheme.primary : colorScheme.outline,
+              color: iconColor,
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             Text(
-              _isRunning ? "Service is Active" : "Service is Inactive",
+              _isRunning ? "Service Running" : _status,
+              textAlign: TextAlign.center,
               style: textTheme.headlineSmall?.copyWith(
                 fontWeight: FontWeight.bold,
-                color: _isRunning
-                    ? colorScheme.onSurface
-                    : colorScheme.onSurfaceVariant,
+                color: contentColor,
               ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              "Background process will auto-send requests at 12:00 AM Beijing Time.",
-              textAlign: TextAlign.center,
-              style: textTheme.bodyMedium?.copyWith(
-                color: _isRunning
-                    ? colorScheme.onSurface
-                    : colorScheme.onSurfaceVariant,
+            if (_isRunning)
+              Padding(
+                padding: const EdgeInsets.only(top: 8.0),
+                child: Text(
+                  "Waiting for 00:00 Beijing Time...",
+                  style: textTheme.bodyMedium?.copyWith(color: contentColor),
+                ),
               ),
-            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildConfigCard(ColorScheme colorScheme) {
+  Widget _buildConnectionCard(ColorScheme colorScheme, TextTheme textTheme) {
+    final bool isLoggedIn = _tokenController.text.isNotEmpty;
+
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(24),
-        side: BorderSide(color: colorScheme.outlineVariant, width: 1),
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: colorScheme.outlineVariant),
       ),
-      // Use surfaceVariant or surface instead of surfaceContainerLow
-      color: colorScheme.surface,
       child: Padding(
-        padding: const EdgeInsets.all(20.0),
+        padding: const EdgeInsets.all(16.0),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            TextField(
-              controller: _tokenController,
-              decoration: const InputDecoration(
-                labelText: "Service Token",
-                prefixIcon: Icon(Icons.key),
-                helperText: "Cookie: new_bbs_serviceToken",
-              ),
+            Row(
+              children: [
+                Icon(Icons.account_circle, color: colorScheme.primary),
+                const SizedBox(width: 8),
+                Text(
+                  "Xiaomi Account",
+                  style: textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const Spacer(),
+                if (isLoggedIn)
+                  Chip(
+                    label: Text(_userId ?? 'User'),
+                    avatar: const Icon(Icons.check, size: 16),
+                    backgroundColor: colorScheme.primaryContainer,
+                  ),
+              ],
             ),
-            const SizedBox(height: 20),
-            TextField(
-              controller: _popRunTokenController,
-              decoration: const InputDecoration(
-                labelText: "PopRun Token",
-                prefixIcon: Icon(Icons.vpn_key_outlined),
-                helperText: "From Chrome JS snippet (Optional)",
+            const SizedBox(height: 16),
+            if (!isLoggedIn)
+              FilledButton.icon(
+                onPressed: () => _openLoginScreen(context),
+                icon: const Icon(Icons.login),
+                label: const Text("CONNECT ACCOUNT"),
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size.fromHeight(50),
+                ),
+              )
+            else
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _checkAccountStatus,
+                      icon: const Icon(Icons.refresh),
+                      label: const Text("Refresh Status"),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  IconButton(
+                    onPressed: _clearLogin,
+                    icon: const Icon(Icons.logout),
+                    tooltip: "Logout",
+                    style: IconButton.styleFrom(
+                      foregroundColor: colorScheme.error,
+                      backgroundColor: colorScheme.errorContainer.withOpacity(
+                        0.2,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ),
-            const SizedBox(height: 20),
-            TextField(
-              controller: _timeShiftController,
-              decoration: const InputDecoration(
-                labelText: "Time Shift (ms)",
-                prefixIcon: Icon(Icons.timer),
-                helperText: "Pre-execution offset (e.g., 500)",
-              ),
-              keyboardType: TextInputType.number,
-            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildActionsCard(ColorScheme colorScheme) {
-    return Column(
-      children: [
-        FilledButton.icon(
-          onPressed: _checkAccountStatus,
-          icon: const Icon(Icons.verified_user_outlined),
-          label: const Text("Check Account Status"),
-          style: FilledButton.styleFrom(
-            minimumSize: const Size.fromHeight(56),
-            backgroundColor: colorScheme.secondaryContainer,
-            foregroundColor: colorScheme.onSecondaryContainer,
+  Widget _buildAdvancedSection(ColorScheme colorScheme) {
+    return Card(
+      elevation: 0,
+      color: colorScheme.surfaceContainerLow,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: ExpansionTile(
+        title: const Text("Advanced Configuration"),
+        leading: const Icon(Icons.settings),
+        childrenPadding: const EdgeInsets.all(16),
+        children: [
+          TextField(
+            controller: _tokenController,
+            readOnly: true,
+            decoration: const InputDecoration(
+              labelText: "Service Token",
+              border: OutlineInputBorder(),
+              prefixIcon: Icon(Icons.key),
+            ),
+            maxLines: 1,
           ),
-        ),
-        const SizedBox(height: 16),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: colorScheme.secondaryContainer.withOpacity(0.5),
-            borderRadius: BorderRadius.circular(16),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _popRunTokenController,
+            readOnly: true, // Auto-filled now
+            decoration: const InputDecoration(
+              labelText: "PopRun Token",
+              border: OutlineInputBorder(),
+              prefixIcon: Icon(Icons.vpn_key),
+            ),
+            maxLines: 1,
           ),
-          child: Row(
-            children: [
-              Icon(Icons.info_outline, color: colorScheme.secondary),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  "Account Status: $_status",
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: colorScheme.onSecondaryContainer,
-                  ),
-                ),
-              ),
-            ],
+          const SizedBox(height: 12),
+          TextField(
+            controller: _timeShiftController,
+            decoration: const InputDecoration(
+              labelText: "Time Shift (ms)",
+              border: OutlineInputBorder(),
+              prefixIcon: Icon(Icons.timelapse),
+              helperText: "Adjustment for network latency",
+            ),
+            keyboardType: TextInputType.number,
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

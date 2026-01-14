@@ -1,24 +1,54 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:dynamic_color/dynamic_color.dart';
+import 'package:window_manager/window_manager.dart';
 
 import 'services/background_service.dart';
 import 'services/notification_service.dart';
+import 'services/desktop_service.dart';
 import 'ui/home_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Initialize desktop service (window & tray)
+  await DesktopService.init();
+
   // Initialize notifications
   await NotificationService().init();
 
-  // Initialize background service (but don't start it yet maybe, or it is config only)
+  // Initialize background service
   await BackgroundService.initializeService();
 
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> with WindowListener {
+  @override
+  void initState() {
+    super.initState();
+    windowManager.addListener(this);
+  }
+
+  @override
+  void dispose() {
+    windowManager.removeListener(this);
+    super.dispose();
+  }
+
+  @override
+  void onWindowClose() {
+    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+      DesktopService.onWindowClose();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -29,8 +59,7 @@ class MyApp extends StatelessWidget {
 
         if (lightDynamic != null && darkDynamic != null) {
           lightScheme = lightDynamic.harmonized();
-          lightDynamic
-              .harmonized(); // Just in case, though assigning should be enough
+          lightDynamic.harmonized();
 
           darkScheme = darkDynamic.harmonized();
         } else {

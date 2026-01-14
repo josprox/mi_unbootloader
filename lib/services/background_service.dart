@@ -67,12 +67,15 @@ class BackgroundService {
       return;
     }
 
+    Timer? timer;
+
     if (service is AndroidServiceInstance) {
       service.on('setAsForeground').listen((event) {
         service.setAsForegroundService();
       });
 
       service.on('stopService').listen((event) {
+        timer?.cancel();
         service.stopSelf();
       });
     }
@@ -107,7 +110,7 @@ class BackgroundService {
       final startTimestamp = DateTime.now().millisecondsSinceEpoch;
       final startBeijingTime = beijingTime;
 
-      Timer.periodic(const Duration(milliseconds: 50), (timer) async {
+      timer = Timer.periodic(const Duration(milliseconds: 50), (t) async {
         int elapsed = DateTime.now().millisecondsSinceEpoch - startTimestamp;
         DateTime currentBeijingLogically = startBeijingTime.add(
           Duration(milliseconds: elapsed),
@@ -124,7 +127,7 @@ class BackgroundService {
             }
           }
         } else if (timeDiff.inMilliseconds <= 0) {
-          timer.cancel();
+          t.cancel();
           if (service is AndroidServiceInstance) {
             service.setForegroundNotificationInfo(
               title: "Mi Unlocker EXECUTING",

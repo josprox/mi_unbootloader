@@ -43,9 +43,13 @@ dependencies:
   flutter_local_notifications: ^17.2.1
   shared_preferences: ^2.2.0
   crypto: ^3.0.3
-  uuid: ^4.2.1
+  uuid: ^3.0.7
   provider: ^6.1.1
   dynamic_color: ^1.6.8
+  flutter_inappwebview: ^6.1.5
+  desktop_webview_window: ^0.2.3
+  system_tray: ^2.0.2
+  window_manager: ^0.3.9
   intl: ^0.20.2
   flutter_launcher_icons: ^0.14.4
 
