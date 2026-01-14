@@ -11,14 +11,18 @@ import 'ui/home_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize desktop service (window & tray)
-  await DesktopService.init();
+  try {
+    // Initialize desktop service (window & tray)
+    await DesktopService.init();
 
-  // Initialize notifications
-  await NotificationService().init();
+    // Initialize notifications
+    await NotificationService().init();
 
-  // Initialize background service
-  await BackgroundService.initializeService();
+    // Initialize background service
+    await BackgroundService.initializeService();
+  } catch (e) {
+    debugPrint('Initialization failed: $e');
+  }
 
   runApp(const MyApp());
 }

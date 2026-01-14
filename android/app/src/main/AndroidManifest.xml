@@ -8,6 +8,10 @@
         android:label="mi unbootloader"
         android:name="${applicationName}"
         android:icon="@mipmap/launcher_icon">
+        <meta-data
+            android:name="io.flutter.embedding.android.ImpellerEnabled"
+            android:value="false" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
