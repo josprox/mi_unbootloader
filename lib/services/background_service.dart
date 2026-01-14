@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
 import '../services/time_service.dart';
 
+@pragma('vm:entry-point')
 class BackgroundService {
   static Future<void> initializeService() async {
     final service = FlutterBackgroundService();
