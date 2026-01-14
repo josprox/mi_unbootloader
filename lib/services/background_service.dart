@@ -177,34 +177,34 @@ class BackgroundService {
             );
           }
 
-          // Launch 4 concurrent workers as requested
+          // Launch concurrent workers based on preference
+          int workerCount = prefs.getInt('concurrent_requests') ?? 4;
+          // Safety cap if pref is corrupted, though UI limits to 50
+          if (workerCount < 1) workerCount = 1;
+          if (workerCount > 100) workerCount = 100;
+
+          if (service is AndroidServiceInstance) {
+            service.setForegroundNotificationInfo(
+              title: "Mi Unlocker EXECUTING",
+              content: "Sending ${workerCount}x concurrent requests!",
+            );
+          }
+
           List<Future> workers = [];
 
-          // Worker 1: Token 1
-          workers.add(_startWorker(1, token1, deviceId, apiService));
-
-          // Worker 2: Token 2 (or Token 1 if T2 missing)
-          workers.add(
-            _startWorker(
-              2,
-              token2?.isNotEmpty == true ? token2! : token1,
-              deviceId,
-              apiService,
-            ),
-          );
-
-          // Worker 3: Token 1
-          workers.add(_startWorker(3, token1, deviceId, apiService));
-
-          // Worker 4: Token 2 (or Token 1 if T2 missing)
-          workers.add(
-            _startWorker(
-              4,
-              token2?.isNotEmpty == true ? token2! : token1,
-              deviceId,
-              apiService,
-            ),
-          );
+          for (int i = 1; i <= workerCount; i++) {
+            // Alternate tokens if token2 exists:
+            // Worker 1 -> Token 1
+            // Worker 2 -> Token 2
+            // Worker 3 -> Token 1 ...
+            String tokenToUse = token1;
+            if (token2 != null && token2.isNotEmpty) {
+              if (i % 2 == 0) {
+                tokenToUse = token2;
+              }
+            }
+            workers.add(_startWorker(i, tokenToUse, deviceId, apiService));
+          }
 
           await Future.wait(workers);
           service.stopSelf();

@@ -27,6 +27,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _userId;
   bool _isRunning = false;
   Timer? _statusTimer;
+  double _concurrentRequests = 4.0; // Default
 
   @override
   void initState() {
@@ -53,6 +54,8 @@ class _HomeScreenState extends State<HomeScreen> {
       _tokenController.text = prefs.getString('token') ?? '';
       _popRunTokenController.text = prefs.getString('poprun_token') ?? '';
       _userId = prefs.getString('user_id');
+      _concurrentRequests = (prefs.getInt('concurrent_requests') ?? 4)
+          .toDouble();
 
       _timeShiftController.text = (prefs.getDouble('timeshift') ?? 0.0)
           .toString();
@@ -71,6 +74,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (_userId != null) {
       await prefs.setString('user_id', _userId!);
     }
+    await prefs.setInt('concurrent_requests', _concurrentRequests.round());
     await prefs.setDouble(
       'timeshift',
       double.tryParse(_timeShiftController.text) ?? 0.0,
@@ -423,6 +427,7 @@ class _HomeScreenState extends State<HomeScreen> {
             maxLines: 1,
           ),
           const SizedBox(height: 12),
+          const SizedBox(height: 12),
           TextField(
             controller: _timeShiftController,
             decoration: const InputDecoration(
@@ -433,6 +438,69 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             keyboardType: TextInputType.number,
           ),
+          const SizedBox(height: 24),
+          Row(
+            children: [
+              const Icon(Icons.rocket_launch, color: Colors.orange),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      "Concurrent Requests: ${_concurrentRequests.toInt()}",
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    Text(
+                      "Increase for higher success chance (CPU intensive)",
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          Slider(
+            value: _concurrentRequests,
+            min: 1,
+            max: 50,
+            divisions: 49,
+            label: _concurrentRequests.round().toString(),
+            activeColor: Colors.orange,
+            onChanged: (double value) {
+              setState(() {
+                _concurrentRequests = value;
+              });
+            },
+          ),
+          const SizedBox(height: 8),
+          if (_concurrentRequests > 10)
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.orange.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.orange.withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.warning_amber,
+                    color: Colors.orange,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      "High concurrency may cause network throttling or device lag.",
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Colors.orange[800],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
     );
